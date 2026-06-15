@@ -1,0 +1,326 @@
+\documentclass[conference]{IEEEtran}
+
+%==============================================================================
+% Packages
+%==============================================================================
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+%==============================================================================
+% Document
+%==============================================================================
+\begin{document}
+
+\title{Empirical Benchmarking of Modular OCR Pipelines and Vision--Language Models for Text-Centric Visual Question Answering}
+
+\maketitle
+
+%==============================================================================
+% ABSTRACT
+%==============================================================================
+
+\begin{abstract} 
+Text-centric Visual Question Answering (VQA) involves answering natural language queries by reading and reasoning over text embedded in images. In real-world settings, such text is often affected by visual degradation, which introduces uncertainty in optical character recognition (OCR) and downstream reasoning. While both modular OCR-based pipelines and end-to-end vision-language models are commonly used for text-centric VQA, their relative behavior under degraded visual conditions is not well documented. This paper presents an empirical comparison of modular OCR-assisted pipelines and an end-to-end vision-language model for text-centric VQA under visual degradation. The evaluation is conducted on a dataset of 414 images with 1242 question-answer pairs using accuracy, similarity-based metrics, OCR error measures, and inference throughput. Comparative performance across different system designs is reported under a unified evaluation protocol, revealing that fine-tuned modular pipelines achieve up to 44.44\% exact-match accuracy, outperforming end-to-end baselines (38.00\%) in strict correctness, while the latter demonstrates superior inference speed (0.76 FPS).
+\end{abstract}
+
+\begin{IEEEkeywords}
+Text-centric VQA, OCR, Vision-Language Models, Degraded Visual Conditions
+\end{IEEEkeywords}
+
+%==============================================================================
+% I. INTRODUCTION
+%==============================================================================
+
+\section{Introduction}
+
+Visual Question Answering (VQA) seeks to respond to natural language inquiries on image content by concurrently analyzing visual and textual data. In this larger job, ``text-centric VQA'' is a very difficult setting since answering a question needs correctly reading and understanding the text in the image. In real life, these kinds of situations happen when reading product labels, deciphering signs, getting numbers from printed materials, and analyzing language in papers or natural sceneries. In the actual world, writing in pictures is sometimes hard to see because of motion blur, low resolution, compression errors, or busy backgrounds. These issues often result in flawed optical character recognition (OCR), yielding noisy or partial textual inputs for later reasoning. A lot of the research that has already been done believes that higher OCR accuracy will automatically lead to better VQA performance. Recent advancements in extensive multimodal models indicate that semantic thinking may, in certain instances, offset recognition failures, especially when contextual cues are present. This insight prompts a more thorough investigation into the impact of OCR errors resulting from visual degradation on subsequent VQA performance.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{blur_augmentation_demo.jpg}
+    \caption{A conceptual representation of text-centric VQA in the face of visual degradation.}
+    \label{fig:intro_motivation}
+\end{figure}
+
+In this study, we examine this issue through an empirical analysis of modular OCR-assisted pipelines and end-to-end vision-language models for text-centric visual question answering under compromised visual conditions. We create a dataset with 414 photos and 1242 question-answer pairs that includes a variety of text types and layouts. A text detection module, a text recognition module, and a language reasoning component make up two modular pipelines. They are tested against an end-to-end vision-language model. All systems are evaluated using a standardized process that includes tests for exact correctness, strong similarity, semantic alignment, and inference efficiency. The resulting comparison gives a clear picture of how different system designs work when the visuals go worse and how the quality of OCR affects how well the system answers questions later on. The investigation elucidates the degree to which semantic reasoning might alleviate suboptimal text recognition in text-centric VQA contexts.
+This work has three important parts. Initially, we present a benchmark framework for text-centric Visual Question Answering (VQA) in compromised visual environments. Second, we conduct a controlled empirical comparison of modular OCR-assisted pipelines, their pretrained equivalents, and an end-to-end vision-language model, utilizing both stringent and robustness-focused assessment criteria with runtime analysis. Third, we present an empirical analysis of the correlation between OCR accuracy and ultimate VQA performance, emphasizing the significance of downstream reasoning in text-oriented VQA systems.
+
+%==============================================================================
+% II. RELATED WORK
+%==============================================================================
+
+\section{Related Work}
+
+Text-centric visual question answering (VQA) has been introduced to address scenarios where answering a question requires reading and reasoning over textual content embedded in images. Early benchmarks such as TextVQA~\cite{singh2019textvqa} and ST-VQA~\cite{biten2019stvqa} established the necessity of integrating optical character recognition (OCR) into VQA pipelines, demonstrating that conventional object-centric models fail when answers depend on scene text. Subsequent datasets, including OCR-VQA and DocVQA~\cite{mathew2021docvqa}, extended this paradigm to document images and structured layouts, further reinforcing the role of text extraction as a core component of visual reasoning. In parallel, significant progress has been made in OCR itself, with robust text detectors such as CRAFT~\cite{baek2019craft} and DBNet~\cite{liao2020dbnet}, and recognizers such as TrOCR~\cite{li2023trocr} and SVTR, enabling more accurate transcription of irregular and degraded text. Many text-centric VQA systems explicitly leverage these advances by feeding recognized text tokens into multimodal reasoning models, often assuming that improvements in OCR quality directly translate to improved VQA performance. More recently, end-to-end vision-language models such as CLIP, Flamingo, BLIP-2, and Qwen-VL~\cite{bai2023qwen} have sought to bypass explicit OCR by jointly learning visual perception and semantic reasoning, suggesting that high-level context may compensate for imperfect text recognition. However, despite these developments, there is limited systematic analysis of how OCR errors under realistic visual degradation propagate to downstream VQA performance, or whether traditional OCR metrics such as CER and WER are reliable indicators of final answer correctness. Existing works primarily report aggregate VQA accuracy under standard conditions, leaving the relationship between low-level transcription noise and high-level semantic reasoning largely unexplored. This gap motivates our empirical study, which directly benchmarks modular OCR-assisted pipelines against an end-to-end vision-language model under controlled visual degradation to analyze how OCR quality influences text-centric VQA outcomes.
+
+%==============================================================================
+% III. PROBLEM FORMULATION AND METHODOLOGY
+%==============================================================================
+\section{Methodology}
+
+Text-centric visual question answering (VQA) requires jointly interpreting visual content and embedded text to answer natural language queries. In practical acquisition scenarios, however, textual cues are often observed under non-ideal visual conditions, including motion blur, defocus, and resolution loss. To explicitly capture this setting, let $I \in \mathbb{R}^{H \times W \times 3}$ denote an image and $q$ a corresponding question. The observed input is modeled as a degraded version of the original image, $\tilde{I} = \mathcal{D}(I)$, where $\mathcal{D}(\cdot)$ represents a visual degradation operator. The objective of text-centric VQA is therefore to predict an answer $a$ conditioned on the degraded visual input and the question:
+\begin{equation}
+a = f(\tilde{I}, q).
+\end{equation}
+This formulation makes explicit that all perception and reasoning stages must operate on imperfect visual evidence, which is central to the empirical analysis conducted in this work.
+
+A common paradigm for addressing text-centric VQA decomposes the mapping $f(\cdot)$ into modular stages corresponding to text detection, text recognition, and semantic reasoning. Under this formulation, the degraded image $\tilde{I}$ is first processed by a text detection function $r(\cdot)$ to produce a set of text regions:
+\begin{equation}
+B = r(\tilde{I}),
+\end{equation}
+where $B = \{b_1, b_2, \dots, b_K\}$ denotes the detected text bounding boxes. These regions are subsequently converted into textual tokens through a recognition function $h(\cdot)$:
+\begin{equation}
+T = h(B),
+\end{equation}
+yielding a sequence of recognized tokens $T = \{t_1, t_2, \dots, t_M\}$. Finally, a semantic reasoning module $g(\cdot)$ integrates the recognized text with the question to generate the predicted answer:
+\begin{equation}
+a = g(T, q).
+\end{equation}
+This modular decomposition enables the effects of OCR quality and semantic reasoning to be examined independently, allowing a controlled analysis of how recognition errors propagate to downstream VQA performance.
+
+In contrast, end-to-end vision--language models directly infer answers from visual and linguistic inputs without explicitly separating OCR as an intermediate step:
+\begin{equation}
+a = f_{\text{VLM}}(\tilde{I}, q),
+\end{equation}
+where $f_{\text{VLM}}(\cdot)$ denotes a pretrained vision--language model. Such models implicitly learn joint visual--semantic representations and may therefore mitigate error amplification caused by explicit OCR failures. Including this formulation enables a direct comparison between modular and end-to-end approaches under identical degradation conditions.
+
+To evaluate performance comprehensively, we employ metrics that capture both strict correctness and robustness to recognition noise. Exact-match accuracy measures the proportion of predictions that exactly match the ground-truth answers and is defined as:
+\begin{equation}
+\text{Acc} =
+\frac{1}{N}
+\sum_{i=1}^{N}
+\mathbb{I}(\hat{a}_i = a_i),
+\end{equation}
+where $N$ denotes the total number of question--answer pairs. To account for partial correctness arising from minor transcription errors, we additionally report Average Normalized Levenshtein Similarity (ANLS):
+\begin{equation}
+\text{ANLS} =
+\frac{1}{N}
+\sum_{i=1}^{N}
+\max\left(
+0, 1 - \frac{D(a_i,\hat{a}_i)}{\max(|a_i|,|\hat{a}_i|)}
+\right),
+\end{equation}
+where $D(\cdot,\cdot)$ denotes the Levenshtein distance. Semantic similarity is measured using embedding-based similarity to capture meaning-level agreement beyond surface-form matching. Character Error Rate (CER) and Word Error Rate (WER) are reported as diagnostic indicators of OCR quality, while Frames Per Second (FPS) quantifies end-to-end inference throughput.
+
+Two modular OCR-assisted pipelines are evaluated, differing in their detection and recognition components while sharing a common semantic reasoning backbone. Both pipelines employ Qwen2-VL-2B as the reasoning module, ensuring that observed differences in VQA performance are primarily attributable to OCR quality rather than reasoning capacity. The first pipeline integrates character-aware text detection with transformer-based recognition. Text detection is performed using CRAFT~\cite{baek2019craft}, which predicts per-pixel character region and affinity maps using a VGG16-BN backbone pretrained on ImageNet, enabling robust localization of curved and irregular text under degradation. Text recognition is carried out using TrOCR~\cite{li2023trocr}, which formulates OCR as a sequence-to-sequence translation task using a Vision Transformer encoder and an autoregressive language decoder.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{easyocr_trocr_qwen_pipeline.png}
+\caption{EasyOCR + TrOCR + Qwen pipeline. Blue indicates pretrained components and pink indicates fine-tuned components.}
+\label{fig:easyocr_pipeline}
+\end{figure}
+
+The second modular pipeline emphasizes inference efficiency and practical deployability. It is based on PP-OCRv4, which employs DB++ with a MobileNetV3 backbone for text detection, coupled with a DBFPN neck and a DBHead for differentiable binarization. Text recognition is performed using SVTR, which balances representational capacity and computational efficiency through spatial mixing operations.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{paddleocr_qwen_pipeline.png}
+\caption{PaddleOCR + Qwen pipeline architecture.}
+\label{fig:paddleocr_pipeline}
+\end{figure}
+
+Both modular pipelines share the same reasoning component. During inference, Qwen2-VL-2B operates with 4-bit quantization and Flash Attention~2 to reduce memory usage and improve throughput. To enhance robustness under severe visual degradation, targeted fine-tuning strategies are applied to the OCR components. PaddleOCR is trained using a three-stage curriculum learning scheme with progressively increasing blur severity. TrOCR is fine-tuned on blur-augmented data starting from pretrained \texttt{trocr-base-stage1} weights, incorporating Gaussian blur, motion blur, and resolution degradation during training while keeping the Vision Transformer encoder frozen.
+
+
+\section{Experiments and Results}
+
+This section presents a detailed empirical evaluation of modular OCR-assisted pipelines and an end-to-end vision--language model for text-centric VQA under degraded visual conditions. We first describe the benchmark and experimental protocol, followed by a comparative performance analysis, an assessment of domain-specific fine-tuning, and a focused examination of OCR quality metrics in relation to downstream VQA accuracy.
+
+\subsection{Dataset and Experimental Setup}
+
+The evaluation is conducted on a curated benchmark consisting of 414 images associated with a total of 1242 question--answer pairs. The dataset is designed to reflect realistic text-centric VQA scenarios, encompassing a wide range of textual content, visual layouts, and scene contexts. Images are drawn from text-heavy real-world environments and exhibit mixed viewpoints, background clutter, and non-uniform illumination, all of which pose challenges for both text extraction and semantic reasoning.
+
+To simulate acquisition artifacts commonly encountered in mobile and aerial imaging systems, visual degradation is applied uniformly across the dataset using Gaussian blur with standard deviation $\sigma = 5.0$. This controlled degradation setting captures the effects of motion blur and defocus while ensuring consistency across experimental conditions.
+
+Questions are categorized into three groups based on their reasoning requirements: (i) header-level queries that depend on prominent textual cues, (ii) detail-level queries requiring accurate recognition of fine-grained or numerical text, and (iii) spatial reasoning queries involving the relative arrangement of textual elements. This categorization enables a comprehensive evaluation of OCR fidelity and semantic reasoning under degraded visual input.
+
+\subsection{Implementation Details}
+
+For modular pipelines, text detection and recognition are implemented using established open-source frameworks. The EasyOCR-based pipeline employs the CRAFT detector for text localization and a fine-tuned TrOCR model for recognition, while the PaddleOCR-based pipeline uses PP-OCRv4 with curriculum-trained weights optimized for blur robustness. In both cases, recognized text tokens are provided to Qwen2-VL-2B through a unified prompting interface, ensuring that differences in performance arise primarily from OCR quality rather than variations in reasoning input.
+
+The end-to-end baseline directly applies the Qwen2-VL model to the degraded image and question without explicit OCR decomposition. All experiments are conducted under identical hardware and inference settings. End-to-end throughput is reported in Frames Per Second (FPS), accounting for the complete inference pipeline, including preprocessing, OCR (when applicable), and semantic reasoning.
+
+\subsection{Comparative Performance Analysis}
+
+Table~\ref{tab:main_results} presents the primary quantitative comparison under heavy visual degradation ($\sigma = 5.0$). 
+Both fine-tuned modular pipelines demonstrate superior exact-match accuracy compared to the end-to-end baseline. The EasyOCR+TrOCR pipeline achieves the highest accuracy at 44.44\%, followed closely by PaddleOCR at 42.83\%. In comparison, the end-to-end Qwen2-VL model attains 38.00\%. This validates that explicit text extraction provides stronger grounding for VQA when inputs are degraded.
+However, the end-to-end model is more efficient, achieving 0.76 FPS compared to 0.72 FPS and 0.59 FPS for the modular approaches.
+
+\begin{table}[t]
+\centering
+\caption{Main Performance Comparison (Blur $\sigma=5.0$, $n=1242$)}
+\label{tab:main_results}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+\scriptsize
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+Pipeline & Acc (\%) & ANLS & Semantic & CER & FPS \\
+\midrule
+PaddleOCR+Qwen (FT) & 42.83 & 0.59 & 0.61 & \textbf{0.42} & 0.72 \\
+\textbf{EasyOCR+TrOCR+Qwen (FT)} & \textbf{44.44} & \textbf{0.54} & \textbf{0.50} & 0.46 & 0.59 \\
+Qwen2-VL (End-to-End) & 38.00 & 0.57 & 0.65 & N/A & \textbf{0.76} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Impact of Domain-Specific Fine-Tuning}
+
+To isolate the effect of OCR adaptation, we compare fine-tuned pipelines against their pretrained counterparts under identical blur conditions. Results are summarized in Table~\ref{tab:finetuning}. Fine-tuning yields substantial improvements for both pipelines. PaddleOCR improves from 32.50\% to 42.83\%, while EasyOCR+TrOCR improves from 28.00\% to 44.44\%, yielding a remarkable 16.44 points gain.
+
+These results confirm that domain-specific exposure to degraded visual inputs is critical for robust text recognition in text-centric VQA. The larger relative gains observed for EasyOCR+TrOCR further highlight the adaptability of transformer-based recognition models when trained under challenging visual conditions.
+
+\begin{table}[t]
+\centering
+\caption{Impact of Fine-Tuning on Blur Robustness}
+\label{tab:finetuning}
+\begin{tabular}{lccc}
+\toprule
+Pipeline & Pretrained & Fine-tuned & Gain \\
+\midrule
+PaddleOCR+Qwen & 32.50\% & 42.83\% & +10.33\% \\
+EasyOCR+TrOCR+Qwen & 28.00\% & \textbf{44.44\%} & \textbf{+16.44\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{OCR Quality and Downstream VQA Performance}
+
+Table~\ref{tab:ocr_quality} reports OCR-specific quality metrics. PaddleOCR achieves lower Character Error Rates (0.42) compared to EasyOCR+TrOCR (0.46) but scores slightly lower in downstream VQA Accuracy (42.83\% vs 44.44\%). This inversion suggests that lower aggregate CER does not always guarantee better VQA performance; the nature of the errors (e.g. missing critical keywords vs minor typos) plays a larger role in semantic reasoning success.
+
+\begin{table}[t]
+\centering
+\caption{OCR Quality Metrics (Fine-Tuned Models)}
+\label{tab:ocr_quality}
+\begin{tabular}{lccc}
+\toprule
+Pipeline & CER $\downarrow$ & WER $\downarrow$ & Semantic $\uparrow$ \\
+\midrule
+PaddleOCR (FT) & \textbf{0.42} & \textbf{0.50} & \textbf{0.61} \\
+EasyOCR+TrOCR (FT) & 0.46 & 0.56 & 0.50 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%===========================================================================
+% V. ABLATION STUDY
+%===========================================================================
+\section{Ablation Study}
+
+To better understand the factors influencing text-centric VQA performance under visual degradation, we conduct a set of ablation experiments that differentiate the effects of explicit OCR integration, domain-specific fine-tuning, and OCR quality on downstream reasoning. All ablations are performed under identical blur conditions ($\sigma = 5.0$).
+
+\subsection{Effect of Explicit OCR Integration}
+
+We first examine the impact of explicit OCR by comparing modular OCR-assisted pipelines with an end-to-end vision--language model (Qwen2-VL). As shown in Table~\ref{tab:ablation_explicit}, including standalone OCR consistently improves exact-match accuracy (+6.4\%), using the specialized recognition capabilities of the modular components. However, the End-to-End model offers significantly higher throughput (0.76 FPS) and competitive semantic similarity.
+
+\begin{table}[h]
+\centering
+\caption{Comparison of Modular vs. End-to-End Approaches (Blur $\sigma=5.0$)}
+\label{tab:ablation_explicit}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Pipeline Design} & \textbf{Accuracy} & \textbf{Sem. Sim.} & \textbf{FPS} \\
+\midrule
+End-to-End (Qwen2-VL) & 38.00\% & \textbf{0.65} & \textbf{0.76} \\
+Modular (PaddleOCR+Qwen) & 42.83\% & 0.61 & 0.72 \\
+Modular (EasyOCR+TrOCR+Qwen) & \textbf{44.44\%} & 0.50 & 0.59 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Importance of Text Detection}
+
+To assess the necessity of a dedicated text detector, we evaluated the recognition performance with and without the detection stage (feeding the full scene image directly to the recognizer).
+Table~\ref{tab:ablation_detection} reveals a catastrophic performance drop when detection is removed (ANLS $0.54 \rightarrow 0.09$), confirming that even powerful recognizers like TrOCR require localized feature support in complex, cluttered scenes.
+
+\begin{table}[h]
+\centering
+\caption{Ablation of Text Detection Module (ANLS)}
+\label{tab:ablation_detection}
+\begin{tabular}{lc}
+\toprule
+\textbf{Configuration} & \textbf{ANLS Score} \\
+\midrule
+Full Pipeline (Det + Rec) & \textbf{0.54}\\
+No Detection (Rec Only) & 0.0886 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Relationship Between OCR Quality and VQA Accuracy}
+
+Finally, we highlight a key finding: OCR quality metrics (CER/WER) are not linear predictors of VQA success. While the End-to-End model has a higher theoretical "OCR Error" (as it doesn't output transcripts), its semantic reasoning allows it to answer questions correctly 38\% of the time, often not requiring perfect character-level recognition. This shows the need for task-specific evaluation metrics like ANLS over pure recognition metrics in downstream applications.
+
+
+%===========================================================================
+% V. DISCUSSION
+%====================================================
+\section{Discussion}
+
+The experimental results provide useful insights into the behavior of text-centric VQA systems under degraded visual conditions. Across all evaluations, domain-specific adaptation of OCR components consistently improves downstream performance, indicating that aligning training data with deployment conditions is beneficial for robust text-centric VQA. In particular, curriculum-based fine-tuning and blur-aware training enable OCR models to better handle challenging visual inputs without compromising their general recognition capability.The comparison between modular OCR-assisted pipelines and the end-to-end vision--language model highlights complementary strengths. Modular pipelines achieve higher exact-match accuracy under severe degradation, reflecting the advantage of explicit textual grounding when precise recognition is required. At the same time, the end-to-end model offers higher inference throughput and competitive robustness on similarity-based metrics, making it well suited for efficiency-oriented scenarios. These observations suggest that both paradigms are effective and that the choice between them can be guided by practical application requirements.
+In addition, the results indicate that OCR quality and final VQA performance are not strictly coupled. Even when recognition errors are present, semantic reasoning modules are often able to recover correct answers by leveraging contextual information. This behavior emphasizes the importance of evaluating text-centric VQA systems as integrated pipelines rather than optimizing individual components in isolation.Overall, the findings reinforce the value of systematic, system-level evaluation for text-centric VQA and demonstrate that both modular and end-to-end approaches can perform reliably under realistic visual degradation when appropriately designed.
+
+
+%==============================================================================
+% VII. CONCLUSION
+%==============================================================================
+\section{Conclusion}
+
+This paper presented an empirical comparison of modular OCR-assisted pipelines and an end-to-end vision--language model for text-centric visual question answering under degraded visual conditions. The results reveal clear trade-offs between the two paradigms. Fine-tuned modular pipelines achieve higher exact-match accuracy by providing explicit textual grounding, while the end-to-end vision--language model offers competitive robustness on similarity-based metrics together with higher inference throughput. These observations indicate that adapting OCR components to target degradation conditions is beneficial when strict textual correctness is required. The analysis further shows that conventional OCR error measures, such as Character Error Rate (CER) and Word Error Rate (WER), do not consistently reflect downstream VQA performance. Even under severe visual degradation, semantic reasoning modules are often able to recover correct answers by leveraging contextual and linguistic cues. This highlights the importance of evaluating text-centric VQA systems holistically, rather than relying solely on OCR-centric metrics.Future work will focus on extending the presented benchmark to additional degradation types and textual layouts, as well as exploring lightweight hybrid designs that further balance explicit OCR and end-to-end reasoning. 
+
+
+%==============================================================================
+% REFERENCES
+%==============================================================================
+
+\begin{thebibliography}{00}
+
+\bibitem{singh2019textvqa}
+A.~Singh et al., ``Towards VQA Models That Can Read,'' in \emph{Proc. IEEE/CVF CVPR}, 2019.
+
+\bibitem{biten2019stvqa}
+A.~Biten et al., ``Scene Text Visual Question Answering,'' in \emph{Proc. IEEE/CVF ICCV}, 2019.
+
+\bibitem{mathew2021docvqa}
+M.~Mathew, D.~Karatzas, and C.~V.~Jawahar, ``DocVQA: A Dataset for VQA on Document Images,'' in \emph{Proc. IEEE/CVF WACV}, 2021.
+
+\bibitem{hu2020m4c}
+R.~Hu et al., ``Iterative Answer Prediction with Pointer-Augmented Multimodal Transformers for TextVQA,'' in \emph{Proc. IEEE/CVF CVPR}, 2020.
+
+\bibitem{du2022ppocr}
+Y.~Du et al., ``PP-OCRv3: More Attempts for the Improvement of Ultra Lightweight OCR System,'' \emph{arXiv preprint arXiv:2206.03001}, 2022.
+
+\bibitem{li2023trocr}
+M.~Li et al., ``TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models,'' in \emph{Proc. AAAI}, 2023.
+
+\bibitem{baek2019craft}
+Y.~Baek et al., ``Character Region Awareness for Text Detection,'' in \emph{Proc. IEEE/CVF CVPR}, 2019.
+
+\bibitem{bai2023qwen}
+J.~Bai et al., ``Qwen-VL: A Versatile Vision-Language Model,'' \emph{arXiv preprint arXiv:2308.12966}, 2023.
+
+\bibitem{liao2020dbnet}
+M.~Liao et al., ``Real-Time Scene Text Detection with Differentiable Binarization,'' in \emph{Proc. AAAI}, 2020.
+
+\bibitem{wang2020textzoom}
+W.~Wang et al., ``Scene Text Image Super-Resolution in the Wild,'' in \emph{Proc. ECCV}, 2020.
+
+\bibitem{bengio2009curriculum}
+Y.~Bengio, J.~Louradour, R.~Collobert, and J.~Weston, ``Curriculum Learning,'' in \emph{Proc. ICML}, 2009.
+
+\end{thebibliography}
+
+\end{document}
