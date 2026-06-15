@@ -1,0 +1,92 @@
+# Virtual environments
+venv/
+paddleocr_venv/
+paddle_env/
+sr_venv/
+
+# Upstream repos (re-clone these)
+PaddleOCR/
+dronevqa_repo/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Model weights & checkpoints
+*.pt
+*.pth
+*.onnx
+*.pdparams
+*.pdopt
+pretrain_models/
+finetuned_models/
+best_models_for_testing/
+en_PP-OCRv3_det_infer/
+trocr-textzoom-lora/
+
+# Large data files
+*.zip
+*.tar.gz
+*.tar
+os
+sys
+=1.3.0
+
+# Datasets & training data (re-download these)
+TextZoom/
+textocr/
+svt_dataset/
+text_sr/
+input/
+CTW1500/
+cropped/
+curriculum_str_project/
+sr_training/
+dataset_collection/
+ppocr/
+
+# Output directories
+output_*/
+overnight_training_output/
+inference_*/
+log_output/
+temp_results/
+realblur_samples/
+eval_output/
+demo_output/
+blur_paragraph_test/
+detection_test/
+custom_test_results/
+ocr_pipeline_v2/
+
+# Large log & cache files
+ocr_cache_*.json
+*.log
+*.log.txt
+
+# Images (bulk)
+*.jpg
+*.jpeg
+*.png
+!diagrams/*.png
+!paddleocr_arch.png
+!trocr_arch.png
+!paddleocr_qwen_pipeline.png
+
+# Papers & docs keep, but exclude large generated files
+Github Repo/
+
+# Detection pipeline
+detection_pipeline/
+
+# ST_VQA
+ST_VQA_Project/
+
+# Misc binary
+tools/
+
+# OS files
+.DS_Store
+Thumbs.db
