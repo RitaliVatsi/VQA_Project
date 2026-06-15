@@ -84,7 +84,7 @@ We evaluate two modular OCR-assisted pipelines and one end-to-end baseline:
 
 ### Pipeline 1: SA-DBNet + TrOCR + Qwen2-VL-2B (Proposed)
 
-![SA-DBNet Pipeline](diagrams/fig2_sadbnet_pipeline.png)
+
 
 | Stage | Component | Details |
 |-------|-----------|---------|
@@ -94,7 +94,7 @@ We evaluate two modular OCR-assisted pipelines and one end-to-end baseline:
 
 ### Pipeline 2: PaddleOCR + Qwen2-VL-2B (Baseline)
 
-![PaddleOCR Pipeline](diagrams/fig3_paddleocr_pipeline.png)
+
 
 | Stage | Component | Details |
 |-------|-----------|---------|
