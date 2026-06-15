@@ -1,4 +1,4 @@
-# Text-Centric Visual Question Answering Under Visual Degradation
+# Beyond OCR Accuracy: Text-Centric VQA Under Image Degradation with Modular and End-to-End Pipelines
 
 > **A Comparative Study of Modular and End-to-End Approaches**
 
